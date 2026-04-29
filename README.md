@@ -65,7 +65,7 @@ dist/AutoInput.app
 生成 DMG 安装包：
 
 ```bash
-Scripts/build_dmg.sh
+zsh Scripts/build_dmg.sh
 ```
 
 输出路径：
