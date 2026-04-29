@@ -1,12 +1,19 @@
 # AutoInput
 
+<p align="center">
+  <img src="assets/logo.png" alt="AutoInput logo" width="96">
+</p>
+
 AutoInput 是一个轻量 macOS 菜单栏应用，用来按前台应用自动切换输入法。它主要解决开发场景里的中英文切换问题：打开终端、编辑器或代码工具时自动切到英文输入法，减少手动切换。
+
+![AutoInput 设置界面](assets/screenshot.png)
 
 ## 功能
 
 - 菜单栏常驻运行
 - 按应用 Bundle ID 匹配规则
 - 为每个应用指定目标输入法
+- 从正在运行的应用快速添加规则
 - 支持默认输入法 fallback
 - 支持搜索应用规则
 - 支持本地 JSON 配置
@@ -54,7 +61,7 @@ swift build --product AutoInput
 Scripts/build_app.sh
 ```
 
-打包脚本会把根目录的 `logo.png` 转成 `AutoInput.icns`，并写入应用图标。
+打包脚本会把 `assets/logo.png` 转成 `AutoInput.icns`，并写入应用图标。
 
 输出路径：
 
@@ -71,7 +78,7 @@ zsh Scripts/build_dmg.sh
 输出路径：
 
 ```text
-dist/AutoInput-0.1.0-macOS.dmg
+dist/AutoInput-0.1.1-macOS.dmg
 ```
 
 本地签名和校验：
@@ -102,7 +109,7 @@ GitHub Actions 工作流位于：
 
 `release.yml` 会在推送版本 tag 时自动发布 Release：
 
-- tag 格式：`v0.1.0`、`v1.2.3`
+- tag 格式：`v0.1.1`、`v1.2.3`
 - 产物：`AutoInput-<tag>-macOS.zip`、`AutoInput-<tag>-macOS.dmg`
 - 校验文件：`.zip.sha256`、`.dmg.sha256`
 
@@ -111,8 +118,8 @@ GitHub Actions 工作流位于：
 ```bash
 git checkout main
 git pull
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 如果通过 PR 发布，推荐流程是：
