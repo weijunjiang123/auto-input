@@ -34,6 +34,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     private let countLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private var removeButton: NSButton!
+    private var addApplicationPopover: NSPopover?
 
     private var selectedBundleID: String?
     private var config: AutoInputConfig
@@ -445,52 +446,29 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     }
 
     @objc private func showAddApplicationMenu(_ sender: NSButton) {
-        let menu = NSMenu()
-        let applications = runningApplications()
+        addApplicationPopover?.close()
 
-        if applications.isEmpty {
-            let emptyItem = NSMenuItem(title: "没有正在运行的应用", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
-        } else {
-            for application in applications {
-                let item = NSMenuItem(
-                    title: application.appName,
-                    action: #selector(addRunningApplicationFromMenu(_:)),
-                    keyEquivalent: ""
-                )
-                item.target = self
-                item.representedObject = application.bundleID
-                item.toolTip = application.bundleID
-                item.image = NSWorkspace.shared.icon(forFile: appPathForBundleID(application.bundleID) ?? "")
-                menu.addItem(item)
+        let picker = RunningApplicationsPickerView(
+            applications: runningApplications(),
+            onSelect: { [weak self] application in
+                self?.addApplicationPopover?.close()
+                self?.onAddRunningApplication(application)
+            },
+            onChooseFile: { [weak self] in
+                self?.addApplicationPopover?.close()
+                self?.chooseApplication()
             }
-        }
-
-        menu.addItem(.separator())
-
-        let chooseFile = NSMenuItem(
-            title: "选择应用文件...",
-            action: #selector(chooseApplication),
-            keyEquivalent: ""
         )
-        chooseFile.target = self
-        chooseFile.image = NSImage(systemSymbolName: "folder", accessibilityDescription: "选择应用文件")
-        menu.addItem(chooseFile)
 
-        menu.popUp(
-            positioning: nil,
-            at: NSPoint(x: 0, y: sender.bounds.height + 4),
-            in: sender
-        )
-    }
+        let controller = NSViewController()
+        controller.view = picker
 
-    @objc private func addRunningApplicationFromMenu(_ sender: NSMenuItem) {
-        guard let bundleID = sender.representedObject as? String,
-              let application = runningApplications().first(where: { $0.bundleID == bundleID }) else {
-            return
-        }
-        onAddRunningApplication(application)
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentSize = NSSize(width: 320, height: 360)
+        popover.contentViewController = controller
+        addApplicationPopover = popover
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
     }
 
     @objc private func chooseApplication() {
@@ -666,6 +644,169 @@ private final class EmptyRulesView: NSView {
             stack.centerXAnchor.constraint(equalTo: centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+    }
+}
+
+private final class RunningApplicationsPickerView: NSView {
+    private enum Style {
+        static let background = NSColor(red: 0.14, green: 0.15, blue: 0.18, alpha: 1)
+        static let row = NSColor(white: 1, alpha: 0.06)
+        static let rowHover = NSColor.controlAccentColor.withAlphaComponent(0.22)
+        static let text = NSColor(white: 0.94, alpha: 1)
+        static let secondaryText = NSColor(white: 0.62, alpha: 1)
+        static let stroke = NSColor(white: 1, alpha: 0.10)
+    }
+
+    private let applications: [RunningApplicationCandidate]
+    private let onSelect: (RunningApplicationCandidate) -> Void
+    private let onChooseFile: () -> Void
+
+    init(
+        applications: [RunningApplicationCandidate],
+        onSelect: @escaping (RunningApplicationCandidate) -> Void,
+        onChooseFile: @escaping () -> Void
+    ) {
+        self.applications = applications
+        self.onSelect = onSelect
+        self.onChooseFile = onChooseFile
+        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 360))
+        build()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func build() {
+        wantsLayer = true
+        layer?.backgroundColor = Style.background.cgColor
+
+        let title = NSTextField(labelWithString: "正在运行的应用")
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.textColor = Style.text
+
+        let count = NSTextField(labelWithString: "\(applications.count) 个")
+        count.font = .systemFont(ofSize: 11, weight: .medium)
+        count.textColor = Style.secondaryText
+
+        let header = NSStackView(views: [title, count])
+        header.orientation = .horizontal
+        header.alignment = .firstBaseline
+        header.spacing = 8
+
+        let scrollView = makeApplicationsScrollView()
+        let chooseFile = NSButton(title: "选择应用文件...", target: self, action: #selector(chooseFileClicked))
+        chooseFile.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        chooseFile.imagePosition = .imageLeading
+        chooseFile.bezelStyle = .rounded
+        chooseFile.controlSize = .large
+
+        let stack = NSStackView(views: [header, scrollView, chooseFile])
+        stack.orientation = .vertical
+        stack.alignment = .width
+        stack.spacing = 10
+        stack.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scrollView.heightAnchor.constraint(equalToConstant: 278)
+        ])
+    }
+
+    private func makeApplicationsScrollView() -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        let list = NSStackView()
+        list.orientation = .vertical
+        list.alignment = .width
+        list.spacing = 5
+        list.edgeInsets = NSEdgeInsets(top: 2, left: 0, bottom: 2, right: 4)
+        list.translatesAutoresizingMaskIntoConstraints = false
+
+        if applications.isEmpty {
+            let empty = NSTextField(labelWithString: "没有可添加的前台应用")
+            empty.font = .systemFont(ofSize: 12, weight: .medium)
+            empty.textColor = Style.secondaryText
+            empty.alignment = .center
+            list.addArrangedSubview(empty)
+            empty.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        } else {
+            for application in applications {
+                list.addArrangedSubview(RunningApplicationButton(application: application, onSelect: onSelect))
+            }
+        }
+
+        let document = FlippedDocumentView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(list)
+        scrollView.documentView = document
+
+        NSLayoutConstraint.activate([
+            list.leadingAnchor.constraint(equalTo: document.leadingAnchor),
+            list.trailingAnchor.constraint(equalTo: document.trailingAnchor),
+            list.topAnchor.constraint(equalTo: document.topAnchor),
+            list.bottomAnchor.constraint(lessThanOrEqualTo: document.bottomAnchor),
+            list.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
+        ])
+
+        return scrollView
+    }
+
+    @objc private func chooseFileClicked() {
+        onChooseFile()
+    }
+}
+
+private final class RunningApplicationButton: NSButton {
+    private let application: RunningApplicationCandidate
+    private let onSelect: (RunningApplicationCandidate) -> Void
+
+    init(application: RunningApplicationCandidate, onSelect: @escaping (RunningApplicationCandidate) -> Void) {
+        self.application = application
+        self.onSelect = onSelect
+        super.init(frame: .zero)
+        build()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func build() {
+        title = application.appName
+        image = NSWorkspace.shared.icon(forFile: appPathForBundleID(application.bundleID) ?? "")
+        imagePosition = .imageLeading
+        alignment = .left
+        isBordered = false
+        bezelStyle = .regularSquare
+        target = self
+        action = #selector(clicked)
+        toolTip = application.bundleID
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: 34).isActive = true
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        attributedTitle = NSAttributedString(
+            string: application.appName,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                .foregroundColor: NSColor(white: 0.94, alpha: 1),
+                .paragraphStyle: paragraph
+            ]
+        )
+    }
+
+    @objc private func clicked() {
+        onSelect(application)
     }
 }
 

@@ -194,7 +194,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return RunningApplicationCandidate.RawApplication(
                 bundleID: application.bundleIdentifier,
                 localizedName: application.localizedName,
-                bundleName: bundleName
+                bundleName: bundleName,
+                bundlePath: application.bundleURL?.path,
+                isRegularApplication: application.activationPolicy == .regular
             )
         }
 

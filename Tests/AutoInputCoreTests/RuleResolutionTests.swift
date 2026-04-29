@@ -148,7 +148,9 @@ func testRunningApplicationCandidatesFilterSelfAndMissingBundleIDs() {
             RunningApplicationCandidate.RawApplication(
                 bundleID: "com.apple.Terminal",
                 localizedName: "Terminal",
-                bundleName: nil
+                bundleName: nil,
+                bundlePath: "/System/Applications/Utilities/Terminal.app",
+                isRegularApplication: true
             ),
             RunningApplicationCandidate.RawApplication(
                 bundleID: "",
@@ -173,18 +175,60 @@ func testRunningApplicationCandidatesFilterSelfAndMissingBundleIDs() {
     expectEqual(candidates[0].bundleID, "com.apple.Terminal", "terminal should remain")
 }
 
+func testRunningApplicationCandidatesOnlyIncludeTopLevelRegularApps() {
+    let candidates = RunningApplicationCandidate.candidates(
+        from: [
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.googlecode.iterm2",
+                localizedName: "iTerm2",
+                bundleName: nil,
+                bundlePath: "/Applications/iTerm.app",
+                isRegularApplication: true
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.raycast.macos.Renderer",
+                localizedName: "Raycast Web Content",
+                bundleName: nil,
+                bundlePath: "/Applications/Raycast.app/Contents/Frameworks/Raycast Helper (Renderer).app",
+                isRegularApplication: true
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.apple.LocalAuthenticationRemoteService",
+                localizedName: "LocalAuthenticationRemoteService",
+                bundleName: nil,
+                bundlePath: "/System/Library/CoreServices/LocalAuthenticationRemoteService.app",
+                isRegularApplication: false
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.NoBundlePath",
+                localizedName: "No Bundle Path",
+                bundleName: nil,
+                bundlePath: nil,
+                isRegularApplication: true
+            )
+        ],
+        excludingBundleID: nil
+    )
+
+    expectEqual(candidates.map(\.bundleID), ["com.googlecode.iterm2"], "only top-level regular apps should remain")
+}
+
 func testRunningApplicationCandidatesCollapseDuplicatesAndUseBestName() {
     let candidates = RunningApplicationCandidate.candidates(
         from: [
             RunningApplicationCandidate.RawApplication(
                 bundleID: "com.example.Editor",
                 localizedName: nil,
-                bundleName: "Editor"
+                bundleName: "Editor",
+                bundlePath: "/Applications/Editor.app",
+                isRegularApplication: true
             ),
             RunningApplicationCandidate.RawApplication(
                 bundleID: "com.example.Editor",
                 localizedName: "Editor Pro",
-                bundleName: "Editor"
+                bundleName: "Editor",
+                bundlePath: "/Applications/Editor.app",
+                isRegularApplication: true
             )
         ],
         excludingBundleID: nil
@@ -200,17 +244,23 @@ func testRunningApplicationCandidatesSortByNameThenBundleID() {
             RunningApplicationCandidate.RawApplication(
                 bundleID: "com.example.ZedB",
                 localizedName: "Zed",
-                bundleName: nil
+                bundleName: nil,
+                bundlePath: "/Applications/ZedB.app",
+                isRegularApplication: true
             ),
             RunningApplicationCandidate.RawApplication(
                 bundleID: "com.example.Alpha",
                 localizedName: "Alpha",
-                bundleName: nil
+                bundleName: nil,
+                bundlePath: "/Applications/Alpha.app",
+                isRegularApplication: true
             ),
             RunningApplicationCandidate.RawApplication(
                 bundleID: "com.example.ZedA",
                 localizedName: "Zed",
-                bundleName: nil
+                bundleName: nil,
+                bundlePath: "/Applications/ZedA.app",
+                isRegularApplication: true
             )
         ],
         excludingBundleID: nil
@@ -230,6 +280,7 @@ try testConfigStoreRoundTripsJSON()
 testUpsertingRuleReplacesExistingBundleRule()
 testRuleSearchMatchesNameBundleIDAndEmptyQuery()
 testRunningApplicationCandidatesFilterSelfAndMissingBundleIDs()
+testRunningApplicationCandidatesOnlyIncludeTopLevelRegularApps()
 testRunningApplicationCandidatesCollapseDuplicatesAndUseBestName()
 testRunningApplicationCandidatesSortByNameThenBundleID()
 print("AutoInputCoreTests passed")

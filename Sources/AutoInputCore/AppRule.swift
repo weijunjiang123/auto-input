@@ -96,11 +96,21 @@ public struct RunningApplicationCandidate: Equatable, Identifiable {
         public var bundleID: String?
         public var localizedName: String?
         public var bundleName: String?
+        public var bundlePath: String?
+        public var isRegularApplication: Bool
 
-        public init(bundleID: String?, localizedName: String?, bundleName: String?) {
+        public init(
+            bundleID: String?,
+            localizedName: String?,
+            bundleName: String?,
+            bundlePath: String? = nil,
+            isRegularApplication: Bool = true
+        ) {
             self.bundleID = bundleID
             self.localizedName = localizedName
             self.bundleName = bundleName
+            self.bundlePath = bundlePath
+            self.isRegularApplication = isRegularApplication
         }
     }
 
@@ -120,7 +130,9 @@ public struct RunningApplicationCandidate: Equatable, Identifiable {
         var byBundleID: [String: (candidate: RunningApplicationCandidate, namePriority: Int)] = [:]
 
         for application in applications {
-            guard let bundleID = clean(application.bundleID), bundleID != excludedBundleID else {
+            guard let bundleID = clean(application.bundleID),
+                  bundleID != excludedBundleID,
+                  isVisibleTopLevelApplication(application) else {
                 continue
             }
 
@@ -144,7 +156,17 @@ public struct RunningApplicationCandidate: Equatable, Identifiable {
                     return left.bundleID.localizedCaseInsensitiveCompare(right.bundleID) == .orderedAscending
                 }
                 return nameComparison == .orderedAscending
-            }
+        }
+    }
+
+    private static func isVisibleTopLevelApplication(_ application: RawApplication) -> Bool {
+        guard application.isRegularApplication,
+              let bundlePath = clean(application.bundlePath),
+              bundlePath.hasSuffix(".app"),
+              !bundlePath.contains(".app/Contents/") else {
+            return false
+        }
+        return true
     }
 
     private static func bestName(for application: RawApplication, bundleID: String) -> (value: String, priority: Int) {
