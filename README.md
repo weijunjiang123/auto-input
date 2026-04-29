@@ -76,9 +76,10 @@ GitHub Actions 工作流位于：
 
 ```text
 .github/workflows/build.yml
+.github/workflows/release.yml
 ```
 
-它会在 macOS runner 上执行：
+`build.yml` 会在 PR、`main` / `master` 推送和手动触发时执行：
 
 - 核心测试
 - Debug 编译
@@ -86,6 +87,28 @@ GitHub Actions 工作流位于：
 - Ad-hoc 签名
 - Bundle 校验
 - 上传 `AutoInput.app.zip` artifact
+
+`release.yml` 会在推送版本 tag 时自动发布 Release：
+
+- tag 格式：`v0.1.0`、`v1.2.3`
+- 产物：`AutoInput-<tag>-macOS.zip`
+- 校验文件：`AutoInput-<tag>-macOS.zip.sha256`
+
+发布一个新版本：
+
+```bash
+git checkout main
+git pull
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+如果通过 PR 发布，推荐流程是：
+
+1. 创建 PR，等待 `Build AutoInput` 通过。
+2. 合并 PR 到 `main`。
+3. 在合并后的 commit 上创建并推送 `v*.*.*` tag。
+4. GitHub Actions 自动创建 Release 并上传编译好的 `.app.zip`。
 
 ## 当前限制
 
