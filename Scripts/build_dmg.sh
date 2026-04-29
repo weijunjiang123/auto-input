@@ -30,6 +30,16 @@ hdiutil create \
   -format UDZO \
   "$DMG_PATH" >/dev/null
 
-hdiutil verify "$DMG_PATH" >/dev/null
+sync
 
-echo "$DMG_PATH"
+for attempt in {1..5}; do
+  if hdiutil verify "$DMG_PATH" >/dev/null; then
+    echo "$DMG_PATH"
+    exit 0
+  fi
+
+  echo "DMG verification failed, retrying ($attempt/5)..." >&2
+  sleep 2
+done
+
+hdiutil verify "$DMG_PATH"
