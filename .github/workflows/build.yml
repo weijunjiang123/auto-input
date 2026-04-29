@@ -54,7 +54,7 @@ jobs:
         run: ditto -c -k --keepParent dist/AutoInput.app dist/AutoInput.app.zip
 
       - name: Create artifact DMG
-        run: APP_VERSION="ci" DMG_NAME="AutoInput-macOS.dmg" Scripts/build_dmg.sh
+        run: APP_VERSION="ci" DMG_NAME="AutoInput-macOS.dmg" zsh Scripts/build_dmg.sh
 
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
