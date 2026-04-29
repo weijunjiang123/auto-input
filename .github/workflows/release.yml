@@ -89,7 +89,7 @@ jobs:
         run: |
           APP_VERSION="${VERSION#v}" \
           DMG_NAME="${{ steps.version.outputs.artifact_name }}.dmg" \
-          Scripts/build_dmg.sh
+          zsh Scripts/build_dmg.sh
           shasum -a 256 "dist/${{ steps.version.outputs.artifact_name }}.dmg" > "dist/${{ steps.version.outputs.artifact_name }}.dmg.sha256"
         env:
           VERSION: ${{ steps.version.outputs.version }}
