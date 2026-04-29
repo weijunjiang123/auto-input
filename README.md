@@ -62,6 +62,18 @@ Scripts/build_app.sh
 dist/AutoInput.app
 ```
 
+生成 DMG 安装包：
+
+```bash
+zsh Scripts/build_dmg.sh
+```
+
+输出路径：
+
+```text
+dist/AutoInput-0.1.0-macOS.dmg
+```
+
 本地签名和校验：
 
 ```bash
@@ -86,13 +98,13 @@ GitHub Actions 工作流位于：
 - Release 打包
 - Ad-hoc 签名
 - Bundle 校验
-- 上传 `AutoInput.app.zip` artifact
+- 上传 zip 和 dmg artifact
 
 `release.yml` 会在推送版本 tag 时自动发布 Release：
 
 - tag 格式：`v0.1.0`、`v1.2.3`
-- 产物：`AutoInput-<tag>-macOS.zip`
-- 校验文件：`AutoInput-<tag>-macOS.zip.sha256`
+- 产物：`AutoInput-<tag>-macOS.zip`、`AutoInput-<tag>-macOS.dmg`
+- 校验文件：`.zip.sha256`、`.dmg.sha256`
 
 发布一个新版本：
 
@@ -108,7 +120,7 @@ git push origin v0.1.0
 1. 创建 PR，等待 `Build AutoInput` 通过。
 2. 合并 PR 到 `main`。
 3. 在合并后的 commit 上创建并推送 `v*.*.*` tag。
-4. GitHub Actions 自动创建 Release 并上传编译好的 `.app.zip`。
+4. GitHub Actions 自动创建 Release，并上传 zip/dmg 安装包。
 
 ## 当前限制
 
