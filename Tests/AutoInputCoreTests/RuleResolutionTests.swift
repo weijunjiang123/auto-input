@@ -142,10 +142,94 @@ func testRuleSearchMatchesNameBundleIDAndEmptyQuery() {
     expectEqual(rule.matchesSearch("terminal"), false, "unrelated search should not match")
 }
 
+func testRunningApplicationCandidatesFilterSelfAndMissingBundleIDs() {
+    let candidates = RunningApplicationCandidate.candidates(
+        from: [
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.apple.Terminal",
+                localizedName: "Terminal",
+                bundleName: nil
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "",
+                localizedName: "No Bundle",
+                bundleName: nil
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: nil,
+                localizedName: "Nil Bundle",
+                bundleName: nil
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.AutoInput",
+                localizedName: "AutoInput",
+                bundleName: nil
+            )
+        ],
+        excludingBundleID: "com.example.AutoInput"
+    )
+
+    expectEqual(candidates.count, 1, "only configurable external apps should remain")
+    expectEqual(candidates[0].bundleID, "com.apple.Terminal", "terminal should remain")
+}
+
+func testRunningApplicationCandidatesCollapseDuplicatesAndUseBestName() {
+    let candidates = RunningApplicationCandidate.candidates(
+        from: [
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.Editor",
+                localizedName: nil,
+                bundleName: "Editor"
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.Editor",
+                localizedName: "Editor Pro",
+                bundleName: "Editor"
+            )
+        ],
+        excludingBundleID: nil
+    )
+
+    expectEqual(candidates.count, 1, "duplicate bundle ids should collapse")
+    expectEqual(candidates[0].appName, "Editor Pro", "localized names should replace weaker names")
+}
+
+func testRunningApplicationCandidatesSortByNameThenBundleID() {
+    let candidates = RunningApplicationCandidate.candidates(
+        from: [
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.ZedB",
+                localizedName: "Zed",
+                bundleName: nil
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.Alpha",
+                localizedName: "Alpha",
+                bundleName: nil
+            ),
+            RunningApplicationCandidate.RawApplication(
+                bundleID: "com.example.ZedA",
+                localizedName: "Zed",
+                bundleName: nil
+            )
+        ],
+        excludingBundleID: nil
+    )
+
+    expectEqual(candidates.map(\.bundleID), [
+        "com.example.Alpha",
+        "com.example.ZedA",
+        "com.example.ZedB"
+    ], "candidates should sort by display name then bundle id")
+}
+
 testExactBundleRuleWinsOverDefaultInputSource()
 testDefaultInputSourceIsUsedWhenNoRuleMatches()
 testDisabledConfigDoesNotReturnATarget()
 try testConfigStoreRoundTripsJSON()
 testUpsertingRuleReplacesExistingBundleRule()
 testRuleSearchMatchesNameBundleIDAndEmptyQuery()
+testRunningApplicationCandidatesFilterSelfAndMissingBundleIDs()
+testRunningApplicationCandidatesCollapseDuplicatesAndUseBestName()
+testRunningApplicationCandidatesSortByNameThenBundleID()
 print("AutoInputCoreTests passed")

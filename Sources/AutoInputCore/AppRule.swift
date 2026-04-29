@@ -90,3 +90,78 @@ public struct InputSourceDescriptor: Codable, Equatable, Identifiable {
         self.isASCII = isASCII
     }
 }
+
+public struct RunningApplicationCandidate: Equatable, Identifiable {
+    public struct RawApplication: Equatable {
+        public var bundleID: String?
+        public var localizedName: String?
+        public var bundleName: String?
+
+        public init(bundleID: String?, localizedName: String?, bundleName: String?) {
+            self.bundleID = bundleID
+            self.localizedName = localizedName
+            self.bundleName = bundleName
+        }
+    }
+
+    public var id: String { bundleID }
+    public var bundleID: String
+    public var appName: String
+
+    public init(bundleID: String, appName: String) {
+        self.bundleID = bundleID
+        self.appName = appName
+    }
+
+    public static func candidates(
+        from applications: [RawApplication],
+        excludingBundleID excludedBundleID: String?
+    ) -> [RunningApplicationCandidate] {
+        var byBundleID: [String: (candidate: RunningApplicationCandidate, namePriority: Int)] = [:]
+
+        for application in applications {
+            guard let bundleID = clean(application.bundleID), bundleID != excludedBundleID else {
+                continue
+            }
+
+            let name = bestName(for: application, bundleID: bundleID)
+            let candidate = RunningApplicationCandidate(bundleID: bundleID, appName: name.value)
+
+            if let existing = byBundleID[bundleID] {
+                if name.priority > existing.namePriority {
+                    byBundleID[bundleID] = (candidate, name.priority)
+                }
+            } else {
+                byBundleID[bundleID] = (candidate, name.priority)
+            }
+        }
+
+        return byBundleID.values
+            .map(\.candidate)
+            .sorted { left, right in
+                let nameComparison = left.appName.localizedCaseInsensitiveCompare(right.appName)
+                if nameComparison == .orderedSame {
+                    return left.bundleID.localizedCaseInsensitiveCompare(right.bundleID) == .orderedAscending
+                }
+                return nameComparison == .orderedAscending
+            }
+    }
+
+    private static func bestName(for application: RawApplication, bundleID: String) -> (value: String, priority: Int) {
+        if let localizedName = clean(application.localizedName) {
+            return (localizedName, 2)
+        }
+        if let bundleName = clean(application.bundleName) {
+            return (bundleName, 1)
+        }
+        return (bundleID, 0)
+    }
+
+    private static func clean(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+}

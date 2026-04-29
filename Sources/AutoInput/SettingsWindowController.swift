@@ -21,6 +21,8 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     private let inputSources: [InputSourceDescriptor]
     private let getConfig: () -> AutoInputConfig
     private let onChange: (AutoInputConfig) -> Void
+    private let runningApplications: () -> [RunningApplicationCandidate]
+    private let onAddRunningApplication: (RunningApplicationCandidate) -> Void
     private let onAddApplication: (URL) -> Void
 
     private let rootStack = NSStackView()
@@ -51,11 +53,15 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         inputSources: [InputSourceDescriptor],
         getConfig: @escaping () -> AutoInputConfig,
         onChange: @escaping (AutoInputConfig) -> Void,
+        runningApplications: @escaping () -> [RunningApplicationCandidate],
+        onAddRunningApplication: @escaping (RunningApplicationCandidate) -> Void,
         onAddApplication: @escaping (URL) -> Void
     ) {
         self.inputSources = inputSources
         self.getConfig = getConfig
         self.onChange = onChange
+        self.runningApplications = runningApplications
+        self.onAddRunningApplication = onAddRunningApplication
         self.onAddApplication = onAddApplication
         self.config = getConfig()
 
@@ -95,6 +101,12 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         rebuildRows()
         updateCount()
         updateStatus()
+    }
+
+    func selectRule(bundleID: String) {
+        selectedBundleID = bundleID
+        searchQuery = ""
+        searchField.stringValue = ""
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -261,13 +273,13 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         searchField.controlSize = .large
         searchField.translatesAutoresizingMaskIntoConstraints = false
 
-        let addButton = NSButton(title: "", target: self, action: #selector(chooseApplication))
+        let addButton = NSButton(title: "", target: self, action: #selector(showAddApplicationMenu(_:)))
         addButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "添加应用")
         addButton.imagePosition = .imageOnly
         addButton.bezelStyle = .rounded
         addButton.controlSize = .large
         addButton.contentTintColor = NSColor.controlAccentColor
-        addButton.toolTip = "选择一个应用并添加输入法规则"
+        addButton.toolTip = "从正在运行的应用或应用文件添加输入法规则"
 
         removeButton = NSButton(title: "", target: self, action: #selector(removeSelectedRule))
         removeButton.image = NSImage(systemSymbolName: "minus", accessibilityDescription: "移除所选")
@@ -430,6 +442,55 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         config.isEnabled = enabledSwitch.state == .on
         onChange(config)
         reload(config: config)
+    }
+
+    @objc private func showAddApplicationMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+        let applications = runningApplications()
+
+        if applications.isEmpty {
+            let emptyItem = NSMenuItem(title: "没有正在运行的应用", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            menu.addItem(emptyItem)
+        } else {
+            for application in applications {
+                let item = NSMenuItem(
+                    title: application.appName,
+                    action: #selector(addRunningApplicationFromMenu(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = application.bundleID
+                item.toolTip = application.bundleID
+                item.image = NSWorkspace.shared.icon(forFile: appPathForBundleID(application.bundleID) ?? "")
+                menu.addItem(item)
+            }
+        }
+
+        menu.addItem(.separator())
+
+        let chooseFile = NSMenuItem(
+            title: "选择应用文件...",
+            action: #selector(chooseApplication),
+            keyEquivalent: ""
+        )
+        chooseFile.target = self
+        chooseFile.image = NSImage(systemSymbolName: "folder", accessibilityDescription: "选择应用文件")
+        menu.addItem(chooseFile)
+
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: 0, y: sender.bounds.height + 4),
+            in: sender
+        )
+    }
+
+    @objc private func addRunningApplicationFromMenu(_ sender: NSMenuItem) {
+        guard let bundleID = sender.representedObject as? String,
+              let application = runningApplications().first(where: { $0.bundleID == bundleID }) else {
+            return
+        }
+        onAddRunningApplication(application)
     }
 
     @objc private func chooseApplication() {
@@ -608,6 +669,10 @@ private final class EmptyRulesView: NSView {
     }
 }
 
+private func appPathForBundleID(_ bundleID: String) -> String? {
+    NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)?.path
+}
+
 private final class RuleRowView: NSView {
     private enum Style {
         static let row = NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1)
@@ -735,9 +800,5 @@ private final class RuleRowView: NSView {
 
     @objc private func punctuationChanged(_ sender: NSSwitch) {
         onPunctuationChange(sender.state == .on)
-    }
-
-    private func appPathForBundleID(_ bundleID: String) -> String? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)?.path
     }
 }

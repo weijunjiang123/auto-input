@@ -38,6 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             inputSources: inputSources,
             getConfig: { [weak self] in self?.config ?? .empty },
             onChange: { [weak self] nextConfig in self?.updateConfig(nextConfig) },
+            runningApplications: { [weak self] in self?.runningApplicationCandidates() ?? [] },
+            onAddRunningApplication: { [weak self] application in self?.addRunningApplicationRule(application) },
             onAddApplication: { [weak self] appURL in self?.addApplicationRule(at: appURL) }
         )
         settingsWindowController = controller
@@ -176,6 +178,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        let appName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? appURL.deletingPathExtension().lastPathComponent
+
+        addRule(bundleID: bundleID, appName: appName, forceEnglishPunctuation: false)
+    }
+
+    private func runningApplicationCandidates() -> [RunningApplicationCandidate] {
+        let rawApplications = NSWorkspace.shared.runningApplications.map { application in
+            let bundle = application.bundleURL.flatMap { Bundle(url: $0) }
+            let bundleName = bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+                ?? bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
+
+            return RunningApplicationCandidate.RawApplication(
+                bundleID: application.bundleIdentifier,
+                localizedName: application.localizedName,
+                bundleName: bundleName
+            )
+        }
+
+        return RunningApplicationCandidate.candidates(
+            from: rawApplications,
+            excludingBundleID: Bundle.main.bundleIdentifier
+        )
+    }
+
+    private func addRunningApplicationRule(_ application: RunningApplicationCandidate) {
+        addRule(
+            bundleID: application.bundleID,
+            appName: application.appName,
+            forceEnglishPunctuation: false
+        )
+    }
+
+    private func addRule(bundleID: String, appName: String, forceEnglishPunctuation: Bool) {
+        if let index = config.rules.firstIndex(where: { $0.bundleID == bundleID }) {
+            config.rules[index].appName = appName
+            statusMessage = "已更新：\(appName)"
+            saveConfig()
+            settingsWindowController?.selectRule(bundleID: bundleID)
+            settingsWindowController?.reload(config: config)
+            return
+        }
+
         let fallback = inputSources.first { $0.id == config.defaultInputSourceID }
             ?? inputSourceManager.preferredEnglishSource(from: inputSources)
             ?? inputSources.first
@@ -186,19 +232,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let appName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-            ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? appURL.deletingPathExtension().lastPathComponent
-
         config.upsertRule(AppInputRule(
             bundleID: bundleID,
             appName: appName,
             inputSourceID: source.id,
             inputSourceName: source.name,
-            forceEnglishPunctuation: false
+            forceEnglishPunctuation: forceEnglishPunctuation
         ))
         statusMessage = "已添加：\(appName)"
         saveConfig()
+        settingsWindowController?.selectRule(bundleID: bundleID)
         settingsWindowController?.reload(config: config)
     }
 
