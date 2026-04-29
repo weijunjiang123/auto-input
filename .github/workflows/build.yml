@@ -1,0 +1,62 @@
+name: Build AutoInput
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test and package macOS app
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Run core tests
+        run: |
+          export SWIFTPM_CACHE_PATH="$PWD/.build/swiftpm-cache"
+          export CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache"
+          swift run AutoInputCoreTests
+
+      - name: Build debug target
+        run: |
+          export SWIFTPM_CACHE_PATH="$PWD/.build/swiftpm-cache"
+          export CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache"
+          swift build --product AutoInput
+
+      - name: Package app
+        run: Scripts/build_app.sh
+
+      - name: Sign app locally
+        run: codesign --force --deep --sign - dist/AutoInput.app
+
+      - name: Verify app bundle
+        run: |
+          test -x dist/AutoInput.app/Contents/MacOS/AutoInput
+          plutil -lint dist/AutoInput.app/Contents/Info.plist
+          codesign --verify --deep --strict dist/AutoInput.app
+
+      - name: Create artifact zip
+        run: ditto -c -k --keepParent dist/AutoInput.app dist/AutoInput.app.zip
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoInput-macOS
+          path: dist/AutoInput.app.zip
+          if-no-files-found: error
+          retention-days: 14
