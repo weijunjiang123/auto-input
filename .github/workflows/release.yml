@@ -85,6 +85,15 @@ jobs:
           ditto -c -k --keepParent dist/AutoInput.app "dist/${{ steps.version.outputs.artifact_name }}.zip"
           shasum -a 256 "dist/${{ steps.version.outputs.artifact_name }}.zip" > "dist/${{ steps.version.outputs.artifact_name }}.zip.sha256"
 
+      - name: Create DMG
+        run: |
+          APP_VERSION="${VERSION#v}" \
+          DMG_NAME="${{ steps.version.outputs.artifact_name }}.dmg" \
+          Scripts/build_dmg.sh
+          shasum -a 256 "dist/${{ steps.version.outputs.artifact_name }}.dmg" > "dist/${{ steps.version.outputs.artifact_name }}.dmg.sha256"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -95,3 +104,5 @@ jobs:
           files: |
             dist/${{ steps.version.outputs.artifact_name }}.zip
             dist/${{ steps.version.outputs.artifact_name }}.zip.sha256
+            dist/${{ steps.version.outputs.artifact_name }}.dmg
+            dist/${{ steps.version.outputs.artifact_name }}.dmg.sha256
