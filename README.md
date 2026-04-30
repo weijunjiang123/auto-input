@@ -10,7 +10,7 @@ AutoInput 是一个轻量 macOS 菜单栏应用，用来按前台应用自动切
 
 ## 下载
 
-最新版本：[AutoInput v0.1.2](https://github.com/weijunjiang123/auto-input/releases/tag/v0.1.2)
+最新版本：[AutoInput v0.1.3](https://github.com/weijunjiang123/auto-input/releases/tag/v0.1.3)
 
 ## 功能
 
