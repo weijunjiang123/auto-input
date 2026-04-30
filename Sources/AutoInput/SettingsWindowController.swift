@@ -52,6 +52,15 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     private let onAddRunningApplication: (RunningApplicationCandidate) -> Void
     private let onAddApplication: (URL) -> Void
 
+    private enum Layout {
+        static let windowWidth: CGFloat = 430
+        static let windowHeight: CGFloat = 550
+        static let windowMinWidth: CGFloat = 430
+        static let windowMinHeight: CGFloat = 430
+        static let contentInset: CGFloat = 22
+        static let contentMaxWidth: CGFloat = 430
+    }
+
     private let rootStack = NSStackView()
     private let defaultPopup = NSPopUpButton()
     private let enabledSwitch = NSSwitch()
@@ -96,13 +105,13 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         self.config = getConfig()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 430, height: 550),
+            contentRect: NSRect(x: 0, y: 0, width: Layout.windowWidth, height: Layout.windowHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "AutoInput"
-        window.minSize = NSSize(width: 430, height: 430)
+        window.minSize = NSSize(width: Layout.windowMinWidth, height: Layout.windowMinHeight)
         window.center()
 
         super.init(window: window)
@@ -169,27 +178,33 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         rootStack.orientation = .vertical
         rootStack.alignment = .width
         rootStack.spacing = 10
-        rootStack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 14, right: 22)
+        rootStack.edgeInsets = NSEdgeInsets(top: 18, left: 0, bottom: 14, right: 0)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rootStack)
 
-        let fillWidth = rootStack.widthAnchor.constraint(equalTo: contentView.widthAnchor, constant: -44)
+        let horizontalInset = Layout.contentInset * 2
+        let fillWidth = rootStack.widthAnchor.constraint(equalTo: contentView.widthAnchor, constant: -horizontalInset)
         fillWidth.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
             rootStack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             rootStack.topAnchor.constraint(equalTo: contentView.topAnchor),
             rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            rootStack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 22),
-            rootStack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -22),
-            rootStack.widthAnchor.constraint(lessThanOrEqualToConstant: 600),
+            rootStack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: Layout.contentInset),
+            rootStack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -Layout.contentInset),
+            rootStack.widthAnchor.constraint(lessThanOrEqualToConstant: Layout.contentMaxWidth),
             fillWidth
         ])
 
-        rootStack.addArrangedSubview(makeHeader())
-        rootStack.addArrangedSubview(makeDefaultCard())
-        rootStack.addArrangedSubview(makeRulesCard())
-        rootStack.addArrangedSubview(makeStatusBar())
+        addRootArrangedSubview(makeHeader())
+        addRootArrangedSubview(makeDefaultCard())
+        addRootArrangedSubview(makeRulesCard())
+        addRootArrangedSubview(makeStatusBar())
+    }
+
+    private func addRootArrangedSubview(_ view: NSView) {
+        rootStack.addArrangedSubview(view)
+        view.widthAnchor.constraint(equalTo: rootStack.widthAnchor).isActive = true
     }
 
     private func rebuildUIForAppearanceChange() {
