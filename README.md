@@ -8,6 +8,10 @@ AutoInput 是一个轻量 macOS 菜单栏应用，用来按前台应用自动切
 
 ![AutoInput 设置界面](assets/screenshot.png)
 
+## 下载
+
+最新版本：[AutoInput v0.1.2](https://github.com/weijunjiang123/auto-input/releases/tag/v0.1.2)
+
 ## 功能
 
 - 菜单栏常驻运行
@@ -133,5 +137,5 @@ git push origin v0.1.2
 
 - 当前版本只支持按应用切换。
 - 输入法必须先在 macOS 系统设置中启用。
-- `英文标点` 目前作为规则偏好保存，后续可扩展为更细的输入行为控制。
+- `英文标点` 使用 macOS 公开的 ASCII 键盘布局 override，具体效果可能受输入法自身实现影响。
 - CI 产物使用 ad-hoc 签名，正式分发仍建议使用 Apple Developer ID 签名和 notarization。
