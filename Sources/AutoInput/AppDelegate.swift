@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         loadConfig()
+        applyAppearance()
         inputSources = inputSourceManager.enabledInputSources()
         seedInitialDefaults()
         setupStatusItem()
@@ -160,8 +161,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateConfig(_ nextConfig: AutoInputConfig) {
         config = nextConfig
+        applyAppearance()
         saveConfig()
         refreshMenu()
+    }
+
+    private func applyAppearance() {
+        switch config.appearanceMode {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+        settingsWindowController?.window?.appearance = NSApp.appearance
     }
 
     private func addApplicationRule(at appURL: URL) {

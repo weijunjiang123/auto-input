@@ -5,17 +5,44 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate {
+    @MainActor
     private enum Style {
-        static let background = NSColor(red: 0.11, green: 0.12, blue: 0.14, alpha: 1)
-        static let card = NSColor(red: 0.15, green: 0.16, blue: 0.20, alpha: 1)
-        static let row = NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1)
-        static let rowSelected = NSColor(red: 0.22, green: 0.23, blue: 0.28, alpha: 1)
-        static let field = NSColor(red: 0.22, green: 0.23, blue: 0.28, alpha: 1)
-        static let stroke = NSColor(white: 1, alpha: 0.10)
+        static var isDark: Bool {
+            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+
+        static var background: NSColor {
+            isDark
+                ? NSColor(red: 0.11, green: 0.12, blue: 0.14, alpha: 1)
+                : NSColor(red: 0.94, green: 0.95, blue: 0.97, alpha: 1)
+        }
+        static var card: NSColor {
+            isDark
+                ? NSColor(red: 0.15, green: 0.16, blue: 0.20, alpha: 1)
+                : NSColor(red: 0.98, green: 0.98, blue: 1.00, alpha: 1)
+        }
+        static var row: NSColor {
+            isDark
+                ? NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1)
+                : NSColor(red: 0.91, green: 0.92, blue: 0.95, alpha: 1)
+        }
+        static var rowSelected: NSColor {
+            isDark
+                ? NSColor(red: 0.22, green: 0.23, blue: 0.28, alpha: 1)
+                : NSColor(red: 0.84, green: 0.89, blue: 0.98, alpha: 1)
+        }
+        static var field: NSColor {
+            isDark
+                ? NSColor(red: 0.22, green: 0.23, blue: 0.28, alpha: 1)
+                : NSColor.white
+        }
+        static var stroke: NSColor {
+            isDark ? NSColor(white: 1, alpha: 0.10) : NSColor(white: 0, alpha: 0.12)
+        }
         static let selectedStroke = NSColor.controlAccentColor.withAlphaComponent(0.70)
-        static let text = NSColor(white: 0.96, alpha: 1)
-        static let secondaryText = NSColor(white: 0.70, alpha: 1)
-        static let tertiaryText = NSColor(white: 0.56, alpha: 1)
+        static var text: NSColor { isDark ? NSColor(white: 0.96, alpha: 1) : NSColor(white: 0.12, alpha: 1) }
+        static var secondaryText: NSColor { isDark ? NSColor(white: 0.70, alpha: 1) : NSColor(white: 0.42, alpha: 1) }
+        static var tertiaryText: NSColor { isDark ? NSColor(white: 0.56, alpha: 1) : NSColor(white: 0.55, alpha: 1) }
     }
 
     private let inputSources: [InputSourceDescriptor]
@@ -25,16 +52,27 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     private let onAddRunningApplication: (RunningApplicationCandidate) -> Void
     private let onAddApplication: (URL) -> Void
 
+    private enum Layout {
+        static let windowWidth: CGFloat = 430
+        static let windowHeight: CGFloat = 550
+        static let windowMinWidth: CGFloat = 430
+        static let windowMinHeight: CGFloat = 430
+        static let contentInset: CGFloat = 22
+        static let contentMaxWidth: CGFloat = 430
+    }
+
     private let rootStack = NSStackView()
     private let defaultPopup = NSPopUpButton()
     private let enabledSwitch = NSSwitch()
     private let enabledBadge = BadgeView()
     private let rowsStack = NSStackView()
     private let searchField = NSSearchField()
+    private let appearancePopup = NSPopUpButton()
     private let countLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private var removeButton: NSButton!
     private var addApplicationPopover: NSPopover?
+    private var styledCards: [NSView] = []
 
     private var selectedBundleID: String?
     private var config: AutoInputConfig
@@ -67,22 +105,33 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         self.config = getConfig()
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 430, height: 550),
+            contentRect: NSRect(x: 0, y: 0, width: Layout.windowWidth, height: Layout.windowHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "AutoInput"
-        window.minSize = NSSize(width: 430, height: 430)
+        window.minSize = NSSize(width: Layout.windowMinWidth, height: Layout.windowMinHeight)
         window.center()
 
         super.init(window: window)
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(systemAppearanceChanged),
+            name: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            suspensionBehavior: .deliverImmediately
+        )
         buildUI()
         reload(config: config)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     func reload(config: AutoInputConfig) {
@@ -98,10 +147,12 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         enabledSwitch.state = config.isEnabled ? .on : .off
         enabledBadge.setEnabled(config.isEnabled)
         removeButton?.isEnabled = selectedBundleID != nil
+        reloadAppearancePopup()
         reloadDefaultPopup()
         rebuildRows()
         updateCount()
         updateStatus()
+        applyTheme()
     }
 
     func selectRule(bundleID: String) {
@@ -127,27 +178,47 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         rootStack.orientation = .vertical
         rootStack.alignment = .width
         rootStack.spacing = 10
-        rootStack.edgeInsets = NSEdgeInsets(top: 18, left: 22, bottom: 14, right: 22)
+        rootStack.edgeInsets = NSEdgeInsets(top: 18, left: 0, bottom: 14, right: 0)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rootStack)
 
-        let fillWidth = rootStack.widthAnchor.constraint(equalTo: contentView.widthAnchor, constant: -44)
+        let horizontalInset = Layout.contentInset * 2
+        let fillWidth = rootStack.widthAnchor.constraint(equalTo: contentView.widthAnchor, constant: -horizontalInset)
         fillWidth.priority = .defaultHigh
 
         NSLayoutConstraint.activate([
             rootStack.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             rootStack.topAnchor.constraint(equalTo: contentView.topAnchor),
             rootStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            rootStack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: 22),
-            rootStack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -22),
-            rootStack.widthAnchor.constraint(lessThanOrEqualToConstant: 600),
+            rootStack.leadingAnchor.constraint(greaterThanOrEqualTo: contentView.leadingAnchor, constant: Layout.contentInset),
+            rootStack.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -Layout.contentInset),
+            rootStack.widthAnchor.constraint(lessThanOrEqualToConstant: Layout.contentMaxWidth),
             fillWidth
         ])
 
-        rootStack.addArrangedSubview(makeHeader())
-        rootStack.addArrangedSubview(makeDefaultCard())
-        rootStack.addArrangedSubview(makeRulesCard())
-        rootStack.addArrangedSubview(makeStatusBar())
+        addRootArrangedSubview(makeHeader())
+        addRootArrangedSubview(makeDefaultCard())
+        addRootArrangedSubview(makeRulesCard())
+        addRootArrangedSubview(makeStatusBar())
+    }
+
+    private func addRootArrangedSubview(_ view: NSView) {
+        rootStack.addArrangedSubview(view)
+        view.widthAnchor.constraint(equalTo: rootStack.widthAnchor).isActive = true
+    }
+
+    private func rebuildUIForAppearanceChange() {
+        styledCards.removeAll()
+        rowsStack.arrangedSubviews.forEach { view in
+            rowsStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        rootStack.arrangedSubviews.forEach { view in
+            rootStack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        rootStack.removeFromSuperview()
+        buildUI()
     }
 
     private func makeHeader() -> NSView {
@@ -167,7 +238,12 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         enabledSwitch.target = self
         enabledSwitch.action = #selector(enabledChanged)
 
-        let switchStack = NSStackView(views: [enabledBadge, enabledSwitch])
+        appearancePopup.target = self
+        appearancePopup.action = #selector(appearanceChanged)
+        appearancePopup.controlSize = .large
+        appearancePopup.toolTip = "外观"
+
+        let switchStack = NSStackView(views: [appearancePopup, enabledBadge, enabledSwitch])
         switchStack.orientation = .horizontal
         switchStack.alignment = .centerY
         switchStack.spacing = 8
@@ -182,7 +258,8 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
             titleStack.trailingAnchor.constraint(lessThanOrEqualTo: switchStack.leadingAnchor, constant: -18),
 
             switchStack.trailingAnchor.constraint(equalTo: header.trailingAnchor),
-            switchStack.centerYAnchor.constraint(equalTo: header.centerYAnchor)
+            switchStack.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            appearancePopup.widthAnchor.constraint(equalToConstant: 104)
         ])
 
         return header
@@ -415,6 +492,27 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         }
     }
 
+    private func reloadAppearancePopup() {
+        appearancePopup.removeAllItems()
+
+        let items: [(String, AppAppearanceMode)] = [
+            ("跟随系统", .system),
+            ("浅色", .light),
+            ("深色", .dark)
+        ]
+
+        for (title, mode) in items {
+            appearancePopup.addItem(withTitle: title)
+            appearancePopup.lastItem?.representedObject = mode.rawValue
+        }
+
+        if let index = appearancePopup.itemArray.firstIndex(where: {
+            $0.representedObject as? String == config.appearanceMode.rawValue
+        }) {
+            appearancePopup.selectItem(at: index)
+        }
+    }
+
     private func updateRule(_ bundleID: String, source: InputSourceDescriptor) {
         guard let index = config.rules.firstIndex(where: { $0.bundleID == bundleID }) else { return }
         config.rules[index].inputSourceID = source.id
@@ -442,6 +540,23 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     @objc private func enabledChanged() {
         config.isEnabled = enabledSwitch.state == .on
         onChange(config)
+        reload(config: config)
+    }
+
+    @objc private func appearanceChanged() {
+        guard let rawValue = appearancePopup.selectedItem?.representedObject as? String,
+              let mode = AppAppearanceMode(rawValue: rawValue) else {
+            return
+        }
+        config.appearanceMode = mode
+        onChange(config)
+        rebuildUIForAppearanceChange()
+        reload(config: config)
+    }
+
+    @objc private func systemAppearanceChanged() {
+        guard config.appearanceMode == .system else { return }
+        rebuildUIForAppearanceChange()
         reload(config: config)
     }
 
@@ -549,7 +664,16 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         card.layer?.borderColor = Style.stroke.cgColor
         card.layer?.borderWidth = 1
         card.translatesAutoresizingMaskIntoConstraints = false
+        styledCards.append(card)
         return card
+    }
+
+    private func applyTheme() {
+        window?.contentView?.layer?.backgroundColor = Style.background.cgColor
+        for card in styledCards {
+            card.layer?.backgroundColor = Style.card.cgColor
+            card.layer?.borderColor = Style.stroke.cgColor
+        }
     }
 
     private func makeSeparator() -> NSView {
@@ -602,6 +726,16 @@ private final class BadgeView: NSView {
 }
 
 private final class EmptyRulesView: NSView {
+    @MainActor
+    private enum Style {
+        static var isDark: Bool {
+            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        static var icon: NSColor { isDark ? NSColor(white: 0.66, alpha: 1) : NSColor(white: 0.42, alpha: 1) }
+        static var text: NSColor { isDark ? NSColor(white: 0.92, alpha: 1) : NSColor(white: 0.16, alpha: 1) }
+        static var secondaryText: NSColor { isDark ? NSColor(white: 0.66, alpha: 1) : NSColor(white: 0.46, alpha: 1) }
+    }
+
     private let isSearching: Bool
 
     init(isSearching: Bool) {
@@ -622,15 +756,15 @@ private final class EmptyRulesView: NSView {
             accessibilityDescription: nil
         )
         icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 21, weight: .regular)
-        icon.contentTintColor = NSColor(white: 0.66, alpha: 1)
+        icon.contentTintColor = Style.icon
 
         let title = NSTextField(labelWithString: isSearching ? "没有匹配的规则" : "还没有应用规则")
         title.font = .systemFont(ofSize: 14, weight: .semibold)
-        title.textColor = NSColor(white: 0.92, alpha: 1)
+        title.textColor = Style.text
 
         let subtitle = NSTextField(labelWithString: isSearching ? "换个关键词试试" : "点击 + 添加应用")
         subtitle.font = .systemFont(ofSize: 12, weight: .regular)
-        subtitle.textColor = NSColor(white: 0.66, alpha: 1)
+        subtitle.textColor = Style.secondaryText
         subtitle.alignment = .center
 
         let stack = NSStackView(views: [icon, title, subtitle])
@@ -648,10 +782,16 @@ private final class EmptyRulesView: NSView {
 }
 
 private final class RunningApplicationsPickerView: NSView {
+    @MainActor
     private enum Style {
-        static let background = NSColor(red: 0.14, green: 0.15, blue: 0.18, alpha: 1)
-        static let text = NSColor(white: 0.94, alpha: 1)
-        static let secondaryText = NSColor(white: 0.62, alpha: 1)
+        static var isDark: Bool {
+            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        static var background: NSColor {
+            isDark ? NSColor(red: 0.14, green: 0.15, blue: 0.18, alpha: 1) : NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1)
+        }
+        static var text: NSColor { isDark ? NSColor(white: 0.94, alpha: 1) : NSColor(white: 0.14, alpha: 1) }
+        static var secondaryText: NSColor { isDark ? NSColor(white: 0.62, alpha: 1) : NSColor(white: 0.46, alpha: 1) }
     }
 
     private let applications: [RunningApplicationCandidate]
@@ -789,11 +929,16 @@ private final class RunningApplicationsPickerView: NSView {
 }
 
 private final class RunningApplicationRow: NSView {
+    @MainActor
     private enum Style {
         static let background = NSColor.clear
         static let hoverBackground = NSColor.controlAccentColor.withAlphaComponent(0.16)
         static let pressedBackground = NSColor.controlAccentColor.withAlphaComponent(0.28)
-        static let text = NSColor(white: 0.94, alpha: 1)
+        static var text: NSColor {
+            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(white: 0.94, alpha: 1)
+                : NSColor(white: 0.12, alpha: 1)
+        }
     }
 
     private let application: RunningApplicationCandidate
@@ -904,11 +1049,19 @@ private func appPathForBundleID(_ bundleID: String) -> String? {
 }
 
 private final class RuleRowView: NSView {
+    @MainActor
     private enum Style {
-        static let row = NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1)
-        static let rowSelected = NSColor(red: 0.23, green: 0.24, blue: 0.29, alpha: 1)
-        static let text = NSColor(white: 0.95, alpha: 1)
-        static let secondaryText = NSColor(white: 0.68, alpha: 1)
+        static var isDark: Bool {
+            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        }
+        static var row: NSColor {
+            isDark ? NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1) : NSColor(red: 0.91, green: 0.92, blue: 0.95, alpha: 1)
+        }
+        static var rowSelected: NSColor {
+            isDark ? NSColor(red: 0.23, green: 0.24, blue: 0.29, alpha: 1) : NSColor(red: 0.84, green: 0.89, blue: 0.98, alpha: 1)
+        }
+        static var text: NSColor { isDark ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.12, alpha: 1) }
+        static var secondaryText: NSColor { isDark ? NSColor(white: 0.68, alpha: 1) : NSColor(white: 0.44, alpha: 1) }
     }
 
     private let rule: AppInputRule
@@ -946,7 +1099,8 @@ private final class RuleRowView: NSView {
         wantsLayer = true
         layer?.cornerRadius = 9
         layer?.backgroundColor = (isSelected ? Style.rowSelected : Style.row).cgColor
-        layer?.borderColor = (isSelected ? NSColor.controlAccentColor.withAlphaComponent(0.55) : NSColor(white: 1, alpha: 0.06)).cgColor
+        let idleBorder = Style.isDark ? NSColor(white: 1, alpha: 0.06) : NSColor(white: 0, alpha: 0.08)
+        layer?.borderColor = (isSelected ? NSColor.controlAccentColor.withAlphaComponent(0.55) : idleBorder).cgColor
         layer?.borderWidth = 1
         translatesAutoresizingMaskIntoConstraints = false
         heightAnchor.constraint(equalToConstant: 38).isActive = true
