@@ -13,6 +13,13 @@ func expectNil<T>(_ actual: T?, _ message: String) {
     }
 }
 
+func expectNotNil<T>(_ actual: T?, _ message: String) -> T {
+    guard let actual else {
+        fatalError("\(message): expected non-nil")
+    }
+    return actual
+}
+
 func testExactBundleRuleWinsOverDefaultInputSource() {
     let config = AutoInputConfig(
         defaultInputSourceID: "com.apple.keylayout.US",
@@ -33,6 +40,50 @@ func testExactBundleRuleWinsOverDefaultInputSource() {
     let target = config.targetInputSourceID(for: "com.microsoft.VSCode")
 
     expectEqual(target, "com.apple.inputmethod.SCIM.ITABC", "exact rule should win")
+}
+
+func testTargetInputSourceIncludesEnglishPunctuationPreference() {
+    let config = AutoInputConfig(
+        defaultInputSourceID: "com.apple.keylayout.US",
+        defaultInputSourceName: "ABC",
+        isEnabled: true,
+        hasOpenedSettings: false,
+        rules: [
+            AppInputRule(
+                bundleID: "com.apple.Terminal",
+                appName: "Terminal",
+                inputSourceID: "com.apple.inputmethod.SCIM.ITABC",
+                inputSourceName: "简体拼音",
+                forceEnglishPunctuation: true
+            )
+        ]
+    )
+
+    let target = expectNotNil(
+        config.targetInputSource(for: "com.apple.Terminal"),
+        "exact rule should produce a target input source"
+    )
+
+    expectEqual(target.id, "com.apple.inputmethod.SCIM.ITABC", "target should use the rule input source")
+    expectEqual(target.forceEnglishPunctuation, true, "target should carry punctuation preference")
+}
+
+func testDefaultTargetDoesNotForceEnglishPunctuation() {
+    let config = AutoInputConfig(
+        defaultInputSourceID: "com.apple.keylayout.US",
+        defaultInputSourceName: "ABC",
+        isEnabled: true,
+        hasOpenedSettings: false,
+        rules: []
+    )
+
+    let target = expectNotNil(
+        config.targetInputSource(for: "com.example.Unknown"),
+        "default should produce a target input source"
+    )
+
+    expectEqual(target.id, "com.apple.keylayout.US", "target should use the default input source")
+    expectEqual(target.forceEnglishPunctuation, false, "default target should not invent punctuation preference")
 }
 
 func testDefaultInputSourceIsUsedWhenNoRuleMatches() {
@@ -95,6 +146,37 @@ func testConfigStoreRoundTripsJSON() throws {
     let loaded = try store.load()
 
     expectEqual(loaded, config, "config should round trip through JSON")
+}
+
+func testInvalidConfigCanBeBackedUpBeforeDefaultsAreSaved() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ConfigStore(configDirectory: directory)
+    let invalidData = Data("{ broken json".utf8)
+
+    try FileManager.default.createDirectory(
+        at: directory,
+        withIntermediateDirectories: true
+    )
+    try invalidData.write(to: store.configURL)
+
+    let backupURL = try store.backupInvalidConfig(suffix: "20260430T120000Z")
+
+    expectEqual(
+        backupURL.lastPathComponent,
+        "config.invalid.20260430T120000Z.json",
+        "backup should use a recognizable invalid-config name"
+    )
+    expectEqual(
+        FileManager.default.fileExists(atPath: store.configURL.path),
+        false,
+        "invalid config should be moved away before defaults are saved"
+    )
+    expectEqual(
+        try Data(contentsOf: backupURL),
+        invalidData,
+        "backup should preserve the original invalid config contents"
+    )
 }
 
 func testLegacyConfigDefaultsToSystemAppearance() throws {
@@ -315,6 +397,9 @@ testExactBundleRuleWinsOverDefaultInputSource()
 testDefaultInputSourceIsUsedWhenNoRuleMatches()
 testDisabledConfigDoesNotReturnATarget()
 try testConfigStoreRoundTripsJSON()
+testTargetInputSourceIncludesEnglishPunctuationPreference()
+testDefaultTargetDoesNotForceEnglishPunctuation()
+try testInvalidConfigCanBeBackedUpBeforeDefaultsAreSaved()
 try testLegacyConfigDefaultsToSystemAppearance()
 try testConfigStoreRoundTripsAppearanceMode()
 testUpsertingRuleReplacesExistingBundleRule()

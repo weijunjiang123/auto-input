@@ -4,48 +4,10 @@ import Foundation
 import UniformTypeIdentifiers
 
 @MainActor
-final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate {
-    @MainActor
-    private enum Style {
-        static var isDark: Bool {
-            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        }
+final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate, NSWindowDelegate {
+    private typealias Style = SettingsStyle
 
-        static var background: NSColor {
-            isDark
-                ? NSColor(red: 0.11, green: 0.12, blue: 0.14, alpha: 1)
-                : NSColor(red: 0.94, green: 0.95, blue: 0.97, alpha: 1)
-        }
-        static var card: NSColor {
-            isDark
-                ? NSColor(red: 0.15, green: 0.16, blue: 0.20, alpha: 1)
-                : NSColor(red: 0.98, green: 0.98, blue: 1.00, alpha: 1)
-        }
-        static var row: NSColor {
-            isDark
-                ? NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1)
-                : NSColor(red: 0.91, green: 0.92, blue: 0.95, alpha: 1)
-        }
-        static var rowSelected: NSColor {
-            isDark
-                ? NSColor(red: 0.22, green: 0.23, blue: 0.28, alpha: 1)
-                : NSColor(red: 0.84, green: 0.89, blue: 0.98, alpha: 1)
-        }
-        static var field: NSColor {
-            isDark
-                ? NSColor(red: 0.22, green: 0.23, blue: 0.28, alpha: 1)
-                : NSColor.white
-        }
-        static var stroke: NSColor {
-            isDark ? NSColor(white: 1, alpha: 0.10) : NSColor(white: 0, alpha: 0.12)
-        }
-        static let selectedStroke = NSColor.controlAccentColor.withAlphaComponent(0.70)
-        static var text: NSColor { isDark ? NSColor(white: 0.96, alpha: 1) : NSColor(white: 0.12, alpha: 1) }
-        static var secondaryText: NSColor { isDark ? NSColor(white: 0.70, alpha: 1) : NSColor(white: 0.42, alpha: 1) }
-        static var tertiaryText: NSColor { isDark ? NSColor(white: 0.56, alpha: 1) : NSColor(white: 0.55, alpha: 1) }
-    }
-
-    private let inputSources: [InputSourceDescriptor]
+    private var inputSources: [InputSourceDescriptor]
     private let getConfig: () -> AutoInputConfig
     private let onChange: (AutoInputConfig) -> Void
     private let runningApplications: () -> [RunningApplicationCandidate]
@@ -77,6 +39,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
     private var selectedBundleID: String?
     private var config: AutoInputConfig
     private var searchQuery = ""
+    var onClose: (() -> Void)?
 
     private var visibleRules: [AppInputRule] {
         config.rules.filter { $0.matchesSearch(searchQuery) }
@@ -115,6 +78,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         window.center()
 
         super.init(window: window)
+        window.delegate = self
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(systemAppearanceChanged),
@@ -132,6 +96,10 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
 
     deinit {
         DistributedNotificationCenter.default().removeObserver(self)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
     }
 
     func reload(config: AutoInputConfig) {
@@ -159,6 +127,11 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         selectedBundleID = bundleID
         searchQuery = ""
         searchField.stringValue = ""
+    }
+
+    func reloadInputSources(_ inputSources: [InputSourceDescriptor]) {
+        self.inputSources = inputSources
+        reload(config: config)
     }
 
     func controlTextDidChange(_ notification: Notification) {
@@ -227,7 +200,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         header.heightAnchor.constraint(equalToConstant: 42).isActive = true
 
         let title = NSTextField(labelWithString: "按应用切换")
-        title.font = .systemFont(ofSize: 21, weight: .semibold)
+        title.font = .systemFont(ofSize: 19, weight: .semibold)
         title.textColor = Style.text
 
         let titleStack = NSStackView(views: [title])
@@ -270,7 +243,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         card.heightAnchor.constraint(equalToConstant: 50).isActive = true
 
         let title = NSTextField(labelWithString: "默认输入法")
-        title.font = .systemFont(ofSize: 14, weight: .semibold)
+        title.font = .systemFont(ofSize: 13, weight: .medium)
         title.textColor = Style.text
 
         let hint = NSTextField(labelWithString: "未匹配时使用")
@@ -334,7 +307,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         toolbar.heightAnchor.constraint(equalToConstant: 42).isActive = true
 
         let title = NSTextField(labelWithString: "规则")
-        title.font = .systemFont(ofSize: 15, weight: .semibold)
+        title.font = .systemFont(ofSize: 14, weight: .semibold)
         title.textColor = Style.text
 
         countLabel.font = .systemFont(ofSize: 12, weight: .medium)
@@ -660,7 +633,7 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         let card = NSView()
         card.wantsLayer = true
         card.layer?.backgroundColor = Style.card.cgColor
-        card.layer?.cornerRadius = 12
+        card.layer?.cornerRadius = 10
         card.layer?.borderColor = Style.stroke.cgColor
         card.layer?.borderWidth = 1
         card.translatesAutoresizingMaskIntoConstraints = false
@@ -682,507 +655,5 @@ final class SettingsWindowController: NSWindowController, NSSearchFieldDelegate 
         separator.translatesAutoresizingMaskIntoConstraints = false
         separator.heightAnchor.constraint(equalToConstant: 1).isActive = true
         return separator
-    }
-}
-
-private final class FlippedDocumentView: NSView {
-    override var isFlipped: Bool { true }
-}
-
-private final class BadgeView: NSView {
-    private let label = NSTextField(labelWithString: "")
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.cornerRadius = 8
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 20).isActive = true
-        widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
-        label.alignment = .center
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
-
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func setEnabled(_ enabled: Bool) {
-        label.stringValue = enabled ? "已启用" : "已暂停"
-        label.textColor = enabled ? NSColor.systemGreen : NSColor.systemOrange
-        layer?.backgroundColor = (enabled ? NSColor.systemGreen : NSColor.systemOrange)
-            .withAlphaComponent(0.15)
-            .cgColor
-    }
-}
-
-private final class EmptyRulesView: NSView {
-    @MainActor
-    private enum Style {
-        static var isDark: Bool {
-            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        }
-        static var icon: NSColor { isDark ? NSColor(white: 0.66, alpha: 1) : NSColor(white: 0.42, alpha: 1) }
-        static var text: NSColor { isDark ? NSColor(white: 0.92, alpha: 1) : NSColor(white: 0.16, alpha: 1) }
-        static var secondaryText: NSColor { isDark ? NSColor(white: 0.66, alpha: 1) : NSColor(white: 0.46, alpha: 1) }
-    }
-
-    private let isSearching: Bool
-
-    init(isSearching: Bool) {
-        self.isSearching = isSearching
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        build()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    private func build() {
-        let icon = NSImageView()
-        icon.image = NSImage(
-            systemSymbolName: isSearching ? "magnifyingglass" : "plus.app",
-            accessibilityDescription: nil
-        )
-        icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 21, weight: .regular)
-        icon.contentTintColor = Style.icon
-
-        let title = NSTextField(labelWithString: isSearching ? "没有匹配的规则" : "还没有应用规则")
-        title.font = .systemFont(ofSize: 14, weight: .semibold)
-        title.textColor = Style.text
-
-        let subtitle = NSTextField(labelWithString: isSearching ? "换个关键词试试" : "点击 + 添加应用")
-        subtitle.font = .systemFont(ofSize: 12, weight: .regular)
-        subtitle.textColor = Style.secondaryText
-        subtitle.alignment = .center
-
-        let stack = NSStackView(views: [icon, title, subtitle])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 6
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-    }
-}
-
-private final class RunningApplicationsPickerView: NSView {
-    @MainActor
-    private enum Style {
-        static var isDark: Bool {
-            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        }
-        static var background: NSColor {
-            isDark ? NSColor(red: 0.14, green: 0.15, blue: 0.18, alpha: 1) : NSColor(red: 0.96, green: 0.97, blue: 0.98, alpha: 1)
-        }
-        static var text: NSColor { isDark ? NSColor(white: 0.94, alpha: 1) : NSColor(white: 0.14, alpha: 1) }
-        static var secondaryText: NSColor { isDark ? NSColor(white: 0.62, alpha: 1) : NSColor(white: 0.46, alpha: 1) }
-    }
-
-    private let applications: [RunningApplicationCandidate]
-    private let onSelect: (RunningApplicationCandidate) -> Void
-    private let onChooseFile: () -> Void
-    private var applicationRows: [RunningApplicationRow] = []
-
-    init(
-        applications: [RunningApplicationCandidate],
-        onSelect: @escaping (RunningApplicationCandidate) -> Void,
-        onChooseFile: @escaping () -> Void
-    ) {
-        self.applications = applications
-        self.onSelect = onSelect
-        self.onChooseFile = onChooseFile
-        super.init(frame: NSRect(x: 0, y: 0, width: 320, height: 360))
-        build()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    private func build() {
-        wantsLayer = true
-        layer?.backgroundColor = Style.background.cgColor
-
-        let title = NSTextField(labelWithString: "正在运行的应用")
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.textColor = Style.text
-        title.translatesAutoresizingMaskIntoConstraints = false
-
-        let count = NSTextField(labelWithString: "\(applications.count) 个")
-        count.font = .systemFont(ofSize: 11, weight: .medium)
-        count.textColor = Style.secondaryText
-        count.translatesAutoresizingMaskIntoConstraints = false
-
-        let scrollView = makeApplicationsScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-
-        let chooseFile = NSButton(title: "选择应用文件...", target: self, action: #selector(chooseFileClicked))
-        chooseFile.image = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
-        chooseFile.imagePosition = .imageLeading
-        chooseFile.bezelStyle = .rounded
-        chooseFile.controlSize = .large
-        chooseFile.translatesAutoresizingMaskIntoConstraints = false
-
-        addSubview(title)
-        addSubview(count)
-        addSubview(scrollView)
-        addSubview(chooseFile)
-
-        NSLayoutConstraint.activate([
-            title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            title.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-
-            count.leadingAnchor.constraint(equalTo: title.trailingAnchor, constant: 8),
-            count.firstBaselineAnchor.constraint(equalTo: title.firstBaselineAnchor),
-            count.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
-
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            scrollView.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 10),
-            scrollView.bottomAnchor.constraint(equalTo: chooseFile.topAnchor, constant: -10),
-
-            chooseFile.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            chooseFile.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
-            chooseFile.widthAnchor.constraint(equalToConstant: 142),
-            chooseFile.heightAnchor.constraint(equalToConstant: 30)
-        ])
-    }
-
-    private func makeApplicationsScrollView() -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-
-        let document = FlippedDocumentView()
-        document.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = document
-
-        if applications.isEmpty {
-            let empty = NSTextField(labelWithString: "没有可添加的前台应用")
-            empty.font = .systemFont(ofSize: 12, weight: .medium)
-            empty.textColor = Style.secondaryText
-            empty.alignment = .center
-            empty.translatesAutoresizingMaskIntoConstraints = false
-            document.addSubview(empty)
-            NSLayoutConstraint.activate([
-                empty.leadingAnchor.constraint(equalTo: document.leadingAnchor),
-                empty.trailingAnchor.constraint(equalTo: document.trailingAnchor),
-                empty.topAnchor.constraint(equalTo: document.topAnchor, constant: 12),
-                empty.heightAnchor.constraint(equalToConstant: 44),
-                empty.bottomAnchor.constraint(lessThanOrEqualTo: document.bottomAnchor, constant: -12)
-            ])
-        } else {
-            var previousBottom = document.topAnchor
-            var isFirstRow = true
-            for application in applications {
-                let row = RunningApplicationRow(application: application, onSelect: onSelect)
-                row.onHover = { [weak self] hoveredRow in
-                    guard let self else { return }
-                    for candidate in applicationRows where candidate !== hoveredRow {
-                        candidate.setHighlighted(false)
-                    }
-                    hoveredRow.setHighlighted(true)
-                }
-                row.onHoverEnd = { endedRow in
-                    endedRow.setHighlighted(false)
-                }
-                applicationRows.append(row)
-                document.addSubview(row)
-                NSLayoutConstraint.activate([
-                    row.leadingAnchor.constraint(equalTo: document.leadingAnchor),
-                    row.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -4),
-                    row.topAnchor.constraint(equalTo: previousBottom, constant: isFirstRow ? 2 : 5)
-                ])
-                previousBottom = row.bottomAnchor
-                isFirstRow = false
-            }
-            previousBottom.constraint(equalTo: document.bottomAnchor, constant: -2).isActive = true
-        }
-
-        NSLayoutConstraint.activate([
-            document.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor)
-        ])
-
-        return scrollView
-    }
-
-    @objc private func chooseFileClicked() {
-        onChooseFile()
-    }
-}
-
-private final class RunningApplicationRow: NSView {
-    @MainActor
-    private enum Style {
-        static let background = NSColor.clear
-        static let hoverBackground = NSColor.controlAccentColor.withAlphaComponent(0.16)
-        static let pressedBackground = NSColor.controlAccentColor.withAlphaComponent(0.28)
-        static var text: NSColor {
-            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? NSColor(white: 0.94, alpha: 1)
-                : NSColor(white: 0.12, alpha: 1)
-        }
-    }
-
-    private let application: RunningApplicationCandidate
-    private let onSelect: (RunningApplicationCandidate) -> Void
-    var onHover: ((RunningApplicationRow) -> Void)?
-    var onHoverEnd: ((RunningApplicationRow) -> Void)?
-    private var trackingArea: NSTrackingArea?
-
-    init(application: RunningApplicationCandidate, onSelect: @escaping (RunningApplicationCandidate) -> Void) {
-        self.application = application
-        self.onSelect = onSelect
-        super.init(frame: .zero)
-        build()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func setHighlighted(_ highlighted: Bool) {
-        layer?.backgroundColor = (highlighted ? Style.hoverBackground : Style.background).cgColor
-    }
-
-    private func build() {
-        wantsLayer = true
-        layer?.backgroundColor = Style.background.cgColor
-        layer?.cornerRadius = 8
-        toolTip = application.bundleID
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 38).isActive = true
-
-        let icon = NSImageView()
-        icon.image = NSWorkspace.shared.icon(forFile: appPathForBundleID(application.bundleID) ?? "")
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.translatesAutoresizingMaskIntoConstraints = false
-
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        let label = NSTextField(labelWithAttributedString: NSAttributedString(
-            string: application.appName,
-            attributes: [
-                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: Style.text,
-                .paragraphStyle: paragraph
-            ]
-        ))
-        label.alignment = .left
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        addSubview(icon)
-        addSubview(label)
-
-        NSLayoutConstraint.activate([
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 22),
-            icon.heightAnchor.constraint(equalToConstant: 22),
-
-            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 9),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor)
-        ])
-    }
-
-    override func updateTrackingAreas() {
-        if let trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-
-        let area = NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        trackingArea = area
-        addTrackingArea(area)
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        onHover?(self)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        onHoverEnd?(self)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        layer?.backgroundColor = Style.pressedBackground.cgColor
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        defer {
-            onHover?(self)
-        }
-
-        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
-        onSelect(application)
-    }
-}
-
-private func appPathForBundleID(_ bundleID: String) -> String? {
-    NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)?.path
-}
-
-private final class RuleRowView: NSView {
-    @MainActor
-    private enum Style {
-        static var isDark: Bool {
-            NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        }
-        static var row: NSColor {
-            isDark ? NSColor(red: 0.20, green: 0.21, blue: 0.25, alpha: 1) : NSColor(red: 0.91, green: 0.92, blue: 0.95, alpha: 1)
-        }
-        static var rowSelected: NSColor {
-            isDark ? NSColor(red: 0.23, green: 0.24, blue: 0.29, alpha: 1) : NSColor(red: 0.84, green: 0.89, blue: 0.98, alpha: 1)
-        }
-        static var text: NSColor { isDark ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.12, alpha: 1) }
-        static var secondaryText: NSColor { isDark ? NSColor(white: 0.68, alpha: 1) : NSColor(white: 0.44, alpha: 1) }
-    }
-
-    private let rule: AppInputRule
-    private let inputSources: [InputSourceDescriptor]
-    private let onSelect: () -> Void
-    private let onInputSourceChange: (InputSourceDescriptor) -> Void
-    private let onPunctuationChange: (Bool) -> Void
-
-    init(
-        rule: AppInputRule,
-        inputSources: [InputSourceDescriptor],
-        isSelected: Bool,
-        onSelect: @escaping () -> Void,
-        onInputSourceChange: @escaping (InputSourceDescriptor) -> Void,
-        onPunctuationChange: @escaping (Bool) -> Void
-    ) {
-        self.rule = rule
-        self.inputSources = inputSources
-        self.onSelect = onSelect
-        self.onInputSourceChange = onInputSourceChange
-        self.onPunctuationChange = onPunctuationChange
-        super.init(frame: .zero)
-        build(isSelected: isSelected)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        onSelect()
-    }
-
-    private func build(isSelected: Bool) {
-        wantsLayer = true
-        layer?.cornerRadius = 9
-        layer?.backgroundColor = (isSelected ? Style.rowSelected : Style.row).cgColor
-        let idleBorder = Style.isDark ? NSColor(white: 1, alpha: 0.06) : NSColor(white: 0, alpha: 0.08)
-        layer?.borderColor = (isSelected ? NSColor.controlAccentColor.withAlphaComponent(0.55) : idleBorder).cgColor
-        layer?.borderWidth = 1
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 38).isActive = true
-
-        let accent = NSView()
-        accent.wantsLayer = true
-        accent.layer?.backgroundColor = isSelected ? NSColor.controlAccentColor.cgColor : NSColor.clear.cgColor
-        accent.layer?.cornerRadius = 2
-
-        let icon = NSImageView()
-        icon.image = NSWorkspace.shared.icon(forFile: appPathForBundleID(rule.bundleID) ?? "")
-        icon.imageScaling = .scaleProportionallyUpOrDown
-
-        let name = NSTextField(labelWithString: rule.appName)
-        name.font = .systemFont(ofSize: 12, weight: .semibold)
-        name.textColor = Style.text
-        name.lineBreakMode = .byTruncatingTail
-
-        name.toolTip = rule.bundleID
-
-        let appStack = NSStackView(views: [name])
-        appStack.orientation = .horizontal
-        appStack.spacing = 0
-        appStack.alignment = .leading
-
-        let popup = NSPopUpButton()
-        popup.controlSize = .small
-        popup.removeAllItems()
-        for source in inputSources {
-            popup.addItem(withTitle: source.name)
-            popup.lastItem?.representedObject = source.id
-        }
-        if let index = popup.itemArray.firstIndex(where: { $0.representedObject as? String == rule.inputSourceID }) {
-            popup.selectItem(at: index)
-        }
-        popup.target = self
-        popup.action = #selector(inputSourceChanged(_:))
-
-        let punctuation = NSSwitch()
-        punctuation.controlSize = .small
-        punctuation.state = rule.forceEnglishPunctuation ? .on : .off
-        punctuation.target = self
-        punctuation.action = #selector(punctuationChanged(_:))
-        punctuation.toolTip = "英文标点"
-
-        for view in [accent, icon, appStack, popup, punctuation] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(view)
-        }
-
-        NSLayoutConstraint.activate([
-            accent.leadingAnchor.constraint(equalTo: leadingAnchor),
-            accent.centerYAnchor.constraint(equalTo: centerYAnchor),
-            accent.widthAnchor.constraint(equalToConstant: 3),
-            accent.heightAnchor.constraint(equalToConstant: 20),
-
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 20),
-            icon.heightAnchor.constraint(equalToConstant: 20),
-
-            appStack.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 9),
-            appStack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            appStack.widthAnchor.constraint(greaterThanOrEqualToConstant: 96),
-            appStack.trailingAnchor.constraint(lessThanOrEqualTo: popup.leadingAnchor, constant: -8),
-
-            popup.centerYAnchor.constraint(equalTo: centerYAnchor),
-            popup.trailingAnchor.constraint(equalTo: punctuation.leadingAnchor, constant: -14),
-            popup.widthAnchor.constraint(equalToConstant: 154),
-
-            punctuation.centerYAnchor.constraint(equalTo: centerYAnchor),
-            punctuation.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14)
-        ])
-    }
-
-    @objc private func inputSourceChanged(_ sender: NSPopUpButton) {
-        guard let id = sender.selectedItem?.representedObject as? String else { return }
-        guard let source = inputSources.first(where: { $0.id == id }) else { return }
-        onInputSourceChange(source)
-    }
-
-    @objc private func punctuationChanged(_ sender: NSSwitch) {
-        onPunctuationChange(sender.state == .on)
     }
 }
