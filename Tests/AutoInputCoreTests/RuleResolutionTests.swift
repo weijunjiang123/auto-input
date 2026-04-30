@@ -97,6 +97,44 @@ func testConfigStoreRoundTripsJSON() throws {
     expectEqual(loaded, config, "config should round trip through JSON")
 }
 
+func testLegacyConfigDefaultsToSystemAppearance() throws {
+    let json = """
+    {
+      "schemaVersion": 1,
+      "defaultInputSourceID": null,
+      "defaultInputSourceName": null,
+      "isEnabled": true,
+      "hasOpenedSettings": true,
+      "rules": []
+    }
+    """
+
+    let data = Data(json.utf8)
+    let config = try JSONDecoder().decode(AutoInputConfig.self, from: data)
+
+    expectEqual(config.appearanceMode, .system, "missing appearance mode should default to system")
+}
+
+func testConfigStoreRoundTripsAppearanceMode() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let store = ConfigStore(configDirectory: directory)
+    let config = AutoInputConfig(
+        defaultInputSourceID: nil,
+        defaultInputSourceName: nil,
+        isEnabled: true,
+        hasOpenedSettings: true,
+        appearanceMode: .light,
+        rules: []
+    )
+
+    try store.save(config)
+    let loaded = try store.load()
+
+    expectEqual(loaded.appearanceMode, .light, "appearance mode should round trip through JSON")
+    expectEqual(loaded, config, "config should round trip with appearance mode")
+}
+
 func testUpsertingRuleReplacesExistingBundleRule() {
     var config = AutoInputConfig(
         defaultInputSourceID: nil,
@@ -277,6 +315,8 @@ testExactBundleRuleWinsOverDefaultInputSource()
 testDefaultInputSourceIsUsedWhenNoRuleMatches()
 testDisabledConfigDoesNotReturnATarget()
 try testConfigStoreRoundTripsJSON()
+try testLegacyConfigDefaultsToSystemAppearance()
+try testConfigStoreRoundTripsAppearanceMode()
 testUpsertingRuleReplacesExistingBundleRule()
 testRuleSearchMatchesNameBundleIDAndEmptyQuery()
 testRunningApplicationCandidatesFilterSelfAndMissingBundleIDs()

@@ -30,12 +30,19 @@ public struct AppInputRule: Codable, Equatable, Identifiable {
     }
 }
 
+public enum AppAppearanceMode: String, Codable, CaseIterable {
+    case system
+    case light
+    case dark
+}
+
 public struct AutoInputConfig: Codable, Equatable {
     public var schemaVersion: Int
     public var defaultInputSourceID: String?
     public var defaultInputSourceName: String?
     public var isEnabled: Bool
     public var hasOpenedSettings: Bool
+    public var appearanceMode: AppAppearanceMode
     public var rules: [AppInputRule]
 
     public init(
@@ -44,6 +51,7 @@ public struct AutoInputConfig: Codable, Equatable {
         defaultInputSourceName: String?,
         isEnabled: Bool,
         hasOpenedSettings: Bool,
+        appearanceMode: AppAppearanceMode = .system,
         rules: [AppInputRule]
     ) {
         self.schemaVersion = schemaVersion
@@ -51,7 +59,29 @@ public struct AutoInputConfig: Codable, Equatable {
         self.defaultInputSourceName = defaultInputSourceName
         self.isEnabled = isEnabled
         self.hasOpenedSettings = hasOpenedSettings
+        self.appearanceMode = appearanceMode
         self.rules = rules
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case defaultInputSourceID
+        case defaultInputSourceName
+        case isEnabled
+        case hasOpenedSettings
+        case appearanceMode
+        case rules
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        defaultInputSourceID = try container.decodeIfPresent(String.self, forKey: .defaultInputSourceID)
+        defaultInputSourceName = try container.decodeIfPresent(String.self, forKey: .defaultInputSourceName)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        hasOpenedSettings = try container.decodeIfPresent(Bool.self, forKey: .hasOpenedSettings) ?? false
+        appearanceMode = try container.decodeIfPresent(AppAppearanceMode.self, forKey: .appearanceMode) ?? .system
+        rules = try container.decodeIfPresent([AppInputRule].self, forKey: .rules) ?? []
     }
 
     public static var empty: AutoInputConfig {
