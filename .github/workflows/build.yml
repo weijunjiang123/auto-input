@@ -39,7 +39,7 @@ jobs:
           swift build --product AutoInput
 
       - name: Package app
-        run: APP_VERSION="0.1.1" Scripts/build_app.sh
+        run: Scripts/build_app.sh
 
       - name: Sign app locally
         run: codesign --force --deep --sign - dist/AutoInput.app
@@ -55,7 +55,7 @@ jobs:
         run: ditto -c -k --keepParent dist/AutoInput.app dist/AutoInput.app.zip
 
       - name: Create artifact DMG
-        run: APP_VERSION="0.1.1" DMG_NAME="AutoInput-macOS.dmg" zsh Scripts/build_dmg.sh
+        run: DMG_NAME="AutoInput-macOS.dmg" zsh Scripts/build_dmg.sh
 
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4

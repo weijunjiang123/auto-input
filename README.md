@@ -78,7 +78,7 @@ zsh Scripts/build_dmg.sh
 输出路径：
 
 ```text
-dist/AutoInput-0.1.1-macOS.dmg
+dist/AutoInput-0.1.2-macOS.dmg
 ```
 
 本地签名和校验：
@@ -109,7 +109,7 @@ GitHub Actions 工作流位于：
 
 `release.yml` 会在推送版本 tag 时自动发布 Release：
 
-- tag 格式：`v0.1.1`、`v1.2.3`
+- tag 格式：`v0.1.2`、`v1.2.3`
 - 产物：`AutoInput-<tag>-macOS.zip`、`AutoInput-<tag>-macOS.dmg`
 - 校验文件：`.zip.sha256`、`.dmg.sha256`
 
@@ -118,8 +118,8 @@ GitHub Actions 工作流位于：
 ```bash
 git checkout main
 git pull
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 如果通过 PR 发布，推荐流程是：

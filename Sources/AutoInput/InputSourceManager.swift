@@ -43,10 +43,13 @@ final class InputSourceManager {
     }
 
     @discardableResult
-    func selectInputSource(id: String) -> Bool {
+    func selectInputSource(id: String, forceEnglishPunctuation: Bool = false) -> Bool {
         let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
         guard let source = copyInputSources(filter: filter).first else { return false }
-        return TISSelectInputSource(source) == noErr
+        guard TISSelectInputSource(source) == noErr else { return false }
+
+        guard forceEnglishPunctuation, usesInputMethod(source) else { return true }
+        return applyASCIIKeyboardLayoutOverride()
     }
 
     private func copyInputSources(filter: CFDictionary?) -> [TISInputSource] {
@@ -63,5 +66,19 @@ final class InputSourceManager {
         guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
         let value = Unmanaged<CFBoolean>.fromOpaque(pointer).takeUnretainedValue()
         return CFBooleanGetValue(value)
+    }
+
+    private func usesInputMethod(_ source: TISInputSource) -> Bool {
+        let type = stringProperty(source, kTISPropertyInputSourceType)
+        return type == (kTISTypeKeyboardInputMode as String)
+            || type == (kTISTypeKeyboardInputMethodWithoutModes as String)
+    }
+
+    private func applyASCIIKeyboardLayoutOverride() -> Bool {
+        guard let unmanaged = TISCopyCurrentASCIICapableKeyboardLayoutInputSource() else {
+            return false
+        }
+        let layout = unmanaged.takeRetainedValue()
+        return TISSetInputMethodKeyboardLayoutOverride(layout) == noErr
     }
 }

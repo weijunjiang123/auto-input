@@ -95,9 +95,27 @@ public struct AutoInputConfig: Codable, Equatable {
     }
 
     public func targetInputSourceID(for bundleID: String?) -> String? {
+        targetInputSource(for: bundleID)?.id
+    }
+
+    public func targetInputSource(for bundleID: String?) -> TargetInputSource? {
         guard isEnabled else { return nil }
-        guard let bundleID else { return defaultInputSourceID }
-        return rules.first { $0.bundleID == bundleID }?.inputSourceID ?? defaultInputSourceID
+        guard let bundleID else {
+            return defaultInputSourceID.map {
+                TargetInputSource(id: $0, forceEnglishPunctuation: false)
+            }
+        }
+
+        if let rule = rules.first(where: { $0.bundleID == bundleID }) {
+            return TargetInputSource(
+                id: rule.inputSourceID,
+                forceEnglishPunctuation: rule.forceEnglishPunctuation
+            )
+        }
+
+        return defaultInputSourceID.map {
+            TargetInputSource(id: $0, forceEnglishPunctuation: false)
+        }
     }
 
     public mutating func upsertRule(_ rule: AppInputRule) {
@@ -106,6 +124,16 @@ public struct AutoInputConfig: Codable, Equatable {
         } else {
             rules.append(rule)
         }
+    }
+}
+
+public struct TargetInputSource: Equatable {
+    public var id: String
+    public var forceEnglishPunctuation: Bool
+
+    public init(id: String, forceEnglishPunctuation: Bool) {
+        self.id = id
+        self.forceEnglishPunctuation = forceEnglishPunctuation
     }
 }
 

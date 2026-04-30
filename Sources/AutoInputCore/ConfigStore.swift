@@ -38,4 +38,20 @@ public final class ConfigStore {
         let data = try encoder.encode(config)
         try data.write(to: configURL, options: [.atomic])
     }
+
+    @discardableResult
+    public func backupInvalidConfig(suffix: String) throws -> URL {
+        try FileManager.default.createDirectory(
+            at: configDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let backupURL = configDirectory
+            .appendingPathComponent("config.invalid.\(suffix).json")
+        if FileManager.default.fileExists(atPath: backupURL.path) {
+            try FileManager.default.removeItem(at: backupURL)
+        }
+        try FileManager.default.moveItem(at: configURL, to: backupURL)
+        return backupURL
+    }
 }
